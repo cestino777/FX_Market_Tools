@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a2332">
+<title>FX Tools</title>
+<style>
+:root{--bg:#f0f4f8;--card:#fff;--text:#1a1a2e;--sub:#666;--accent:#0055A4;--border:rgba(0,0,0,0.08);}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1923;--card:#1a2836;--text:#e8e6df;--sub:#9aa;--border:rgba(255,255,255,0.08);--accent:#4488cc;}}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+h1{font-size:22px;font-weight:700;margin-bottom:6px;}
+.subtitle{font-size:13px;color:var(--sub);margin-bottom:32px;}
+.tools{display:flex;flex-direction:column;gap:14px;width:100%;max-width:400px;}
+.tool-card{
+  display:flex;align-items:center;gap:16px;
+  background:var(--card);border-radius:14px;padding:20px;
+  text-decoration:none;color:var(--text);
+  box-shadow:0 1px 4px rgba(0,0,0,0.06);
+  transition:transform .15s,box-shadow .15s;
+}
+.tool-card:active{transform:scale(0.98);}
+.tool-icon{font-size:32px;flex-shrink:0;}
+.tool-name{font-size:15px;font-weight:600;}
+.tool-desc{font-size:12px;color:var(--sub);margin-top:2px;}
+.footer{margin-top:40px;font-size:11px;color:var(--sub);}
+</style>
+</head>
+<body>
+  <h1>FX Tools</h1>
+  <div class="subtitle">Trading utilities for mobile</div>
+  <div class="tools">
+    <a class="tool-card" href="market-hour.html">
+      <div class="tool-icon">🕐</div>
+      <div>
+        <div class="tool-name">24-Hour Market Timeline</div>
+        <div class="tool-desc">東京・ロンドン・NY市場時間を視覚化</div>
+      </div>
+    </a>
+    <a class="tool-card" href="fx-calculator.html">
+      <div class="tool-icon">📐</div>
+      <div>
+        <div class="tool-name">FX Lot Calculator</div>
+        <div class="tool-desc">BigBoss USD口座の証拠金・Pip損益計算</div>
+      </div>
+    </a>
+  </div>
+  <div class="footer">v1.0 — GitHub Pages</div>
+</body>
+</html>
