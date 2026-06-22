@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FX Calc">
+<meta name="theme-color" content="#0055A4">
+<title>FX Lot Calculator</title>
+<style>
+:root {
+  --bg:#f0f4f8; --card:#ffffff; --text:#1a1a2e; --sub:#555; --hint:#999;
+  --accent:#0055A4; --accent-light:#e6f2ff; --green:#28a745; --red:#dc3545;
+  --border:rgba(0,0,0,0.1); --input-bg:#f8f9fa;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#0f1923;--card:#1a2836;--text:#e8e6df;--sub:#9aa;--hint:#667;
+    --accent:#4488cc;--accent-light:#1a2d40;--border:rgba(255,255,255,0.1);
+    --input-bg:#0f1923;}
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
+  background:var(--bg);color:var(--text);
+  padding:var(--safe-top) 12px var(--safe-bottom);
+  min-height:100vh; padding-bottom:80px;
+}
+
+h1{font-size:17px;font-weight:700;padding:14px 4px 10px;}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+.card-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.04em;}
+
+/* Form */
+.form-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.form-row:last-child{border-bottom:none;}
+.form-label{font-size:13px;font-weight:500;color:var(--sub);flex:1;}
+.form-input{
+  width:140px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);
+  font-size:15px;font-weight:600;text-align:right;background:var(--input-bg);color:var(--text);
+  font-family:inherit;
+}
+.form-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,85,164,0.15);}
+select.form-input{text-align:left;appearance:auto;font-size:14px;}
+
+/* Results */
+.result-row{display:flex;justify-content:space-between;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--border);}
+.result-row:last-child{border-bottom:none;}
+.result-label{font-size:13px;color:var(--sub);}
+.result-val{font-size:22px;font-weight:700;color:var(--accent);}
+.result-sub{font-size:11px;color:var(--hint);margin-top:2px;}
+
+/* Fetch button */
+.btn-fetch{
+  width:100%;padding:12px;border:none;border-radius:10px;font-size:14px;font-weight:600;
+  background:var(--accent);color:white;cursor:pointer;margin-bottom:12px;
+  transition:all .15s;
+}
+.btn-fetch:active{transform:scale(0.98);}
+.btn-fetch.ok{background:var(--green);}
+.btn-fetch.err{background:var(--red);}
+
+/* Cheat sheet */
+.cheat{font-size:12px;line-height:1.7;color:var(--sub);}
+.cheat table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11px;}
+.cheat th,.cheat td{padding:6px 8px;border:1px solid var(--border);text-align:left;}
+.cheat th{background:var(--accent-light);font-weight:600;}
+.cheat b{color:var(--text);}
+.cheat .blue{color:var(--accent);}
+
+/* Nav */
+.nav-link{display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--accent);text-decoration:none;}
+
+/* Disabled state for USDJPY field */
+.form-input:disabled{opacity:0.35;}
+</style>
+</head>
+<body>
+
+<h1>📐 FX Lot Calculator <span style="font-size:11px;color:var(--hint);font-weight:400">BigBoss USD口座</span></h1>
+
+<button class="btn-fetch" id="btn-fetch" onclick="fetchRates()">🌐 Webから最新レートを自動取得</button>
+
+<div class="card">
+  <div class="card-title">Trading Parameters</div>
+  <div class="form-row">
+    <span class="form-label">通貨ペア</span>
+    <select class="form-input" id="instrument" onchange="onInstrumentChange()"></select>
+  </div>
+  <div class="form-row">
+    <span class="form-label">ロット数</span>
+    <input class="form-input" id="lot" type="number" step="0.01" min="0.01" max="100" value="1.00" oninput="calc()">
+  </div>
+  <div class="form-row">
+    <span class="form-label">現在レート</span>
+    <input class="form-input" id="rate" type="number" step="0.00001" min="0" value="150.00" oninput="calc()">
+  </div>
+  <div class="form-row">
+    <span class="form-label">USDJPYレート <span style="font-size:10px;color:var(--hint)">(クロス円用)</span></span>
+    <input class="form-input" id="usdjpy" type="number" step="0.001" min="50" max="300" value="150.00" oninput="calc()">
+  </div>
+  <div class="form-row">
+    <span class="form-label">レバレッジ</span>
+    <input class="form-input" id="leverage" type="number" step="1" min="1" max="5000" value="1111" oninput="calc()">
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Calculation Results (USD)</div>
+  <div class="result-row">
+    <div>
+      <div class="result-label">💰 必要証拠金 (Margin)</div>
+    </div>
+    <div style="text-align:right">
+      <div class="result-val" id="r-margin">$0.00</div>
+    </div>
+  </div>
+  <div class="result-row">
+    <div>
+      <div class="result-label">📏 1 Pip の損益</div>
+    </div>
+    <div style="text-align:right">
+      <div class="result-val" id="r-pip">$0.00</div>
+    </div>
+  </div>
+  <div class="result-row">
+    <div>
+      <div class="result-label">⏱ 1 Tick (TV1目盛り) の損益</div>
+    </div>
+    <div style="text-align:right">
+      <div class="result-val" id="r-tick">$0.000</div>
+    </div>
+  </div>
+</div>
+
+<div class="card cheat">
+  <div class="card-title">📊 Cheat Sheet</div>
+  <div style="background:var(--accent-light);padding:8px 10px;border-radius:8px;margin-bottom:10px;">
+    <b>1 LOT = 100,000通貨 / 100oz / 1 BTC</b><br>
+    <b>1 Pip = 0.0001 USD / 0.01 JPY / 10 Ticks</b>
+  </div>
+  <table>
+    <tr><th>タイプ</th><th>1 Pip損益</th><th>1 Tick損益</th></tr>
+    <tr><td><b>ドルストレート</b><br><small>EURUSD, GBPUSD</small></td><td class="blue"><b>±$10.00 固定</b></td><td>±$1.00</td></tr>
+    <tr><td><b>クロス円・ドル円</b><br><small>USDJPY, EURJPY</small></td><td style="color:#cc8800"><b>±変動 (~$6.66)</b><br><small>1000÷USDJPY</small></td><td>±変動</td></tr>
+    <tr><td><b>GOLD_USD</b></td><td class="blue"><b>±$1.00 固定</b></td><td>±$0.10</td></tr>
+    <tr><td><b>BTC_USD</b></td><td class="blue"><b>±$0.01</b></td><td>±$0.001</td></tr>
+  </table>
+  <p style="margin-top:8px;font-size:11px;color:var(--hint)">
+    レバレッジ: FX=1111倍 / GOLD=2222倍 / BTC=50倍<br>
+    クロス円の証拠金は内部でEURJPY÷USDJPY(=EURUSD)に変換して計算
+  </p>
+</div>
+
+<a class="nav-link" href="market-hour.html">🕐 Market Hour →</a>
+
+<script>
+// ============================================================
+// Instruments
+// ============================================================
+const INST = {
+  EURUSD:   {type:"XXXUSD", contract:100000, pip:0.0001, tick:0.00001, lev:1111, rate:1.08},
+  GBPUSD:   {type:"XXXUSD", contract:100000, pip:0.0001, tick:0.00001, lev:1111, rate:1.25},
+  AUDUSD:   {type:"XXXUSD", contract:100000, pip:0.0001, tick:0.00001, lev:1111, rate:0.65},
+  USDJPY:   {type:"USDJPY", contract:100000, pip:0.01,   tick:0.001,   lev:1111, rate:150.00},
+  EURJPY:   {type:"XXXJPY", contract:100000, pip:0.01,   tick:0.001,   lev:1111, rate:162.00},
+  GBPJPY:   {type:"XXXJPY", contract:100000, pip:0.01,   tick:0.001,   lev:1111, rate:188.00},
+  AUDJPY:   {type:"XXXJPY", contract:100000, pip:0.01,   tick:0.001,   lev:1111, rate:98.00},
+  EURAUD:   {type:"XXXUSD_CROSS", contract:100000, pip:0.0001, tick:0.00001, lev:1111, rate:1.66},
+  GOLD_USD: {type:"GOLD",   contract:100,    pip:0.01,   tick:0.001,   lev:2222, rate:2300.00},
+  BTC_USD:  {type:"CRYPTO", contract:1,      pip:0.01,   tick:0.001,   lev:50,   rate:60000.00},
+};
+
+// ============================================================
+// Init
+// ============================================================
+const selInst = document.getElementById("instrument");
+Object.keys(INST).forEach(k => {
+  const opt = document.createElement("option");
+  opt.value = k; opt.textContent = k;
+  selInst.appendChild(opt);
+});
+onInstrumentChange();
+
+function onInstrumentChange() {
+  const d = INST[selInst.value];
+  document.getElementById("rate").value = d.rate;
+  document.getElementById("leverage").value = d.lev;
+  document.getElementById("usdjpy").disabled = d.type !== "XXXJPY";
+  calc();
+}
+
+// ============================================================
+// Calculation
+// ============================================================
+function calc() {
+  const name = selInst.value;
+  const d = INST[name];
+  const lot = parseFloat(document.getElementById("lot").value) || 0;
+  const rate = parseFloat(document.getElementById("rate").value) || 0;
+  const usdjpy = parseFloat(document.getElementById("usdjpy").value) || 150;
+  const lev = parseInt(document.getElementById("leverage").value) || 1;
+  const contract = d.contract;
+
+  let margin = 0, pipVal = 0;
+  try {
+    if (d.type === "XXXUSD" || d.type === "XXXUSD_CROSS") {
+      margin = (contract * lot * rate) / lev;
+      pipVal = contract * lot * d.pip;
+    } else if (d.type === "USDJPY") {
+      margin = (contract * lot) / lev;
+      pipVal = (contract * lot * d.pip) / rate;
+    } else if (d.type === "XXXJPY") {
+      const xxxUsd = rate / usdjpy;
+      margin = (contract * lot * xxxUsd) / lev;
+      pipVal = (contract * lot * d.pip) / usdjpy;
+    } else if (d.type === "GOLD") {
+      margin = (contract * lot * rate) / lev;
+      pipVal = contract * lot * d.pip;
+    } else if (d.type === "CRYPTO") {
+      margin = (contract * lot * rate) / lev;
+      pipVal = contract * lot * d.pip;
+    }
+  } catch(e) {}
+
+  const tickVal = pipVal / 10;
+  document.getElementById("r-margin").textContent = `$ ${margin.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  document.getElementById("r-pip").textContent = `$ ${pipVal.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  document.getElementById("r-tick").textContent = `$ ${tickVal.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3})}`;
+}
+
+// ============================================================
+// Web Rate Fetch (exchangerate-api free tier)
+// ============================================================
+async function fetchRates() {
+  const btn = document.getElementById("btn-fetch");
+  btn.textContent = "🔄 取得中...";
+  btn.disabled = true;
+
+  try {
+    // Use multiple free sources
+    const rates = {};
+
+    // 1) ExchangeRate-API (free, no key needed for USD base)
+    const resp = await fetch("https://open.er-api.com/v6/latest/USD");
+    if (resp.ok) {
+      const data = await resp.json();
+      const r = data.rates;
+      if (r) {
+        if (r.EUR) rates.EURUSD = 1 / r.EUR;
+        if (r.GBP) rates.GBPUSD = 1 / r.GBP;
+        if (r.AUD) rates.AUDUSD = 1 / r.AUD;
+        if (r.JPY) {
+          rates.USDJPY = r.JPY;
+          document.getElementById("usdjpy").value = r.JPY.toFixed(3);
+        }
+        if (r.EUR && r.JPY) rates.EURJPY = r.JPY / r.EUR;
+        if (r.GBP && r.JPY) rates.GBPJPY = r.JPY / r.GBP;
+        if (r.AUD && r.JPY) rates.AUDJPY = r.JPY / r.AUD;
+        if (r.EUR && r.AUD) rates.EURAUD = r.AUD / r.EUR;
+      }
+    }
+
+    // Apply rates
+    Object.entries(rates).forEach(([k, v]) => {
+      if (INST[k]) INST[k].rate = parseFloat(v.toFixed(5));
+    });
+
+    onInstrumentChange();
+    btn.textContent = "✅ レート更新完了";
+    btn.className = "btn-fetch ok";
+  } catch(e) {
+    btn.textContent = "❌ 取得失敗（再試行）";
+    btn.className = "btn-fetch err";
+  }
+  btn.disabled = false;
+  setTimeout(() => { btn.textContent = "🌐 Webから最新レートを自動取得"; btn.className = "btn-fetch"; }, 5000);
+}
+</script>
+</body>
+</html>
