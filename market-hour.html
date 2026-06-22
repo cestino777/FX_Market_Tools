@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Market Hour">
+<meta name="theme-color" content="#1a2332">
+<title>24-Hour Market Timeline</title>
+<style>
+:root {
+  --bg:#f0f4f8; --card:#ffffff; --text:#1a1a2e; --sub:#666; --hint:#999;
+  --tyo:#4A90E2; --lon:#43874D; --ny:#CC6666;
+  --now:#E00000; --border:rgba(0,0,0,0.08);
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#0f1923;--card:#1a2836;--text:#e8e6df;--sub:#9aa;--hint:#667;
+    --border:rgba(255,255,255,0.08);}
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;
+  background:var(--bg);color:var(--text);
+  padding:var(--safe-top) 12px var(--safe-bottom);
+  min-height:100vh;
+}
+
+/* Header */
+.header{display:flex;justify-content:space-between;align-items:center;padding:14px 4px 8px;flex-wrap:wrap;gap:6px;}
+.header h1{font-size:16px;font-weight:700;}
+.info-row{display:flex;gap:14px;font-size:11px;}
+.info-item{text-align:center;}
+.info-label{color:var(--hint);font-size:9px;text-transform:uppercase;letter-spacing:0.04em;}
+.info-val{font-weight:600;margin-top:1px;}
+
+/* Chart */
+.chart-card{
+  background:var(--card);border-radius:14px;padding:16px 8px 12px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.06);position:relative;overflow-x:auto;
+}
+.chart-inner{position:relative;min-width:600px;height:260px;}
+
+/* Canvas fills chart-inner */
+canvas{display:block;width:100%;height:100%;}
+
+/* City buttons */
+.city-bar{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;padding:0 4px;}
+.city-bar span{font-size:12px;font-weight:600;}
+.city-btn{
+  padding:6px 13px;border-radius:20px;border:none;font-size:11px;font-weight:500;
+  background:var(--card);color:var(--sub);cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:all .15s;
+}
+.city-btn.active{background:var(--tyo);color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(74,144,226,0.3);}
+
+/* Legend */
+.legend{display:flex;gap:16px;justify-content:center;margin-top:10px;font-size:11px;color:var(--sub);}
+.legend-dot{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:4px;vertical-align:middle;}
+
+/* Nav link */
+.nav-link{display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--tyo);text-decoration:none;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>24-Hour Market Timeline</h1>
+  <div class="info-row">
+    <div class="info-item"><div class="info-label">基準</div><div class="info-val" id="info-base">TYO (WIN)</div></div>
+    <div class="info-item"><div class="info-label">現在時刻</div><div class="info-val" id="info-time">--:--</div></div>
+    <div class="info-item"><div class="info-label">UTC Offset</div><div class="info-val" id="info-offset">--</div></div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="chart-inner">
+    <canvas id="timeline"></canvas>
+  </div>
+</div>
+
+<div class="city-bar">
+  <span>基準都市</span>
+  <div id="city-buttons"></div>
+</div>
+
+<div class="legend">
+  <span><span class="legend-dot" style="background:#4A90E2"></span>TYO</span>
+  <span><span class="legend-dot" style="background:#43874D"></span>LON</span>
+  <span><span class="legend-dot" style="background:#CC6666"></span>NY</span>
+</div>
+
+<a class="nav-link" href="fx-calculator.html">📐 FX Calculator →</a>
+
+<script>
+// ============================================================
+// Data
+// ============================================================
+const CITIES = {
+  TYO:{name:"Tokyo",tz:"Asia/Tokyo"},
+  LHR:{name:"London",tz:"Europe/London"},
+  FRA:{name:"Frankfurt",tz:"Europe/Berlin"},
+  DOH:{name:"Doha",tz:"Asia/Qatar"},
+  SIN:{name:"Singapore",tz:"Asia/Singapore"},
+  BKK:{name:"Bangkok",tz:"Asia/Bangkok"},
+  HKG:{name:"Hong Kong",tz:"Asia/Hong_Kong"},
+  LAX:{name:"Los Angeles",tz:"America/Los_Angeles"},
+  ORD:{name:"Chicago",tz:"America/Chicago"},
+  BOS:{name:"New York",tz:"America/New_York"},
+  SYD:{name:"Sydney",tz:"Australia/Sydney"},
+};
+
+const SESSIONS = [
+  {label:"TYO", startUTC:0, endUTC:6,    color:"#4A90E2", bg:"rgba(74,144,226,0.12)"},
+  {label:"LON", startUTC:7, endUTC:15.5,  color:"#43874D", bg:"rgba(67,135,77,0.12)"},
+  {label:"NY",  startUTC:13.5, endUTC:20, color:"#CC6666", bg:"rgba(204,102,102,0.12)"},
+];
+
+let selectedCity = localStorage.getItem("mh_city") || "TYO";
+
+// ============================================================
+// Timezone helpers
+// ============================================================
+function getTZInfo(tzName) {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat("en-US",{
+    timeZone:tzName, hour:"numeric",minute:"numeric",second:"numeric",
+    year:"numeric",month:"2-digit",day:"2-digit",hour12:false
+  });
+  const p = Object.fromEntries(fmt.formatToParts(now).map(x=>[x.type,x.value]));
+  const h=parseInt(p.hour)||0, m=parseInt(p.minute)||0, s=parseInt(p.second)||0;
+
+  const utcMs = new Date(now.toLocaleString("en-US",{timeZone:"UTC",hour12:false})).getTime();
+  const locMs = new Date(now.toLocaleString("en-US",{timeZone:tzName,hour12:false})).getTime();
+  const off = (locMs - utcMs) / 3600000;
+
+  // DST
+  const jan = new Date(now.getFullYear(),0,1);
+  const jul = new Date(now.getFullYear(),6,1);
+  const offJan = (new Date(jan.toLocaleString("en-US",{timeZone:tzName,hour12:false})) -
+                  new Date(jan.toLocaleString("en-US",{timeZone:"UTC",hour12:false}))) / 3600000;
+  const offJul = (new Date(jul.toLocaleString("en-US",{timeZone:tzName,hour12:false})) -
+                  new Date(jul.toLocaleString("en-US",{timeZone:"UTC",hour12:false}))) / 3600000;
+  const isDST = off !== Math.min(offJan,offJul) && offJan !== offJul;
+
+  return {
+    h,m,s,
+    dateStr:`${p.year}/${p.month}/${p.day}`,
+    timeStr:`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`,
+    offset:off, isDST,
+    floatH: h + m/60 + s/3600
+  };
+}
+
+// ============================================================
+// Canvas drawing
+// ============================================================
+function draw() {
+  const canvas = document.getElementById("timeline");
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = rect.height + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  const isDark = window.matchMedia("(prefers-color-scheme:dark)").matches;
+  const textColor = isDark ? "#ccc" : "#555";
+  const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+  const gridColorMajor = isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
+  const jstColor = isDark ? "#5588cc" : "#0032AA";
+
+  ctx.clearRect(0, 0, W, H);
+
+  const info = getTZInfo(CITIES[selectedCity].tz);
+  const jst = getTZInfo("Asia/Tokyo");
+
+  // Layout
+  const L = W * 0.12; // left margin
+  const R = W * 0.02; // right margin
+  const CW = W - L - R;
+  const rowH = 38;
+  const yScale = 18;
+  const yRows = [yScale + 28, yScale + 28 + rowH, yScale + 28 + rowH*2];
+  const yRefLine = yRows[2] + rowH + 12;
+
+  // Grid lines
+  for (let i = 0; i <= 24; i++) {
+    const x = L + CW * i / 24;
+    ctx.strokeStyle = i % 6 === 0 ? gridColorMajor : gridColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, yScale); ctx.lineTo(x, yRefLine - 4); ctx.stroke();
+  }
+
+  // Local time scale
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.fillStyle = isDark ? "#888" : "#999";
+  ctx.textAlign = "left";
+  ctx.fillText("Local", 4, yScale + 4);
+  ctx.textAlign = "center";
+  for (let i = 0; i <= 24; i++) {
+    const x = L + CW * i / 24;
+    ctx.fillStyle = i % 6 === 0 ? (isDark?"#bbb":"#444") : textColor;
+    ctx.font = i % 6 === 0 ? "bold 10px -apple-system, sans-serif" : "10px -apple-system, sans-serif";
+    ctx.fillText(String(i), x, yScale + 4);
+  }
+
+  // Session bars
+  SESSIONS.forEach((s, idx) => {
+    const y = yRows[idx];
+
+    // Label
+    ctx.textAlign = "left";
+    ctx.font = "bold 11px -apple-system, sans-serif";
+    ctx.fillStyle = s.color;
+    ctx.fillText(s.label, 4, y + 20);
+
+    // Background bar
+    ctx.fillStyle = s.bg;
+    roundRect(ctx, L, y + 4, CW, 28, 6);
+
+    // Session bar
+    const localStart = ((s.startUTC + info.offset) % 24 + 24) % 24;
+    const localEnd = ((s.endUTC + info.offset) % 24 + 24) % 24;
+
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = 0.8;
+    if (localStart < localEnd) {
+      roundRect(ctx, L + CW*localStart/24, y+4, CW*(localEnd-localStart)/24, 28, 6);
+    } else {
+      roundRect(ctx, L + CW*localStart/24, y+4, CW*(24-localStart)/24, 28, 6);
+      roundRect(ctx, L, y+4, CW*localEnd/24, 28, 6);
+    }
+    ctx.globalAlpha = 1.0;
+  });
+
+  // Reference line
+  ctx.strokeStyle = isDark ? "rgba(255,255,255,0.15)" : "#ddd";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(L, yRefLine); ctx.lineTo(W-R, yRefLine); ctx.stroke();
+
+  // UTC row
+  ctx.textAlign = "center";
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.fillStyle = isDark ? "#888" : "#999";
+  for (let i = 0; i <= 24; i++) {
+    const x = L + CW * i / 24;
+    const utcH = ((i - info.offset) % 24 + 24) % 24;
+    ctx.fillText(String(Math.floor(utcH)).padStart(2,"0"), x, yRefLine - 4);
+  }
+  ctx.textAlign = "left";
+  ctx.fillText("UTC", 4, yRefLine - 4);
+
+  // JST row
+  ctx.fillStyle = jstColor;
+  ctx.font = "bold 10px -apple-system, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("JST", 4, yRefLine + 14);
+  ctx.textAlign = "center";
+  for (let i = 0; i <= 24; i += 3) {
+    const x = L + CW * i / 24;
+    const utcH = ((i - info.offset) % 24 + 24) % 24;
+    const jstH = (utcH + 9) % 24;
+    ctx.fillText(String(Math.floor(jstH)).padStart(2,"0"), x, yRefLine + 14);
+  }
+
+  // NOW indicator
+  const nowX = L + CW * info.floatH / 24;
+  ctx.strokeStyle = "#E00000";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(nowX, yScale - 6); ctx.lineTo(nowX, yRefLine + 22); ctx.stroke();
+
+  // Now badge
+  ctx.fillStyle = "#E00000";
+  roundRect(ctx, nowX-14, yScale - 18, 28, 14, 3);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 9px -apple-system, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("Now", nowX, yScale - 8);
+
+  // JST time under now line
+  ctx.fillStyle = "#E00000";
+  ctx.font = "bold 10px -apple-system, sans-serif";
+  ctx.fillText(jst.timeStr, nowX, yRefLine + 34);
+
+  // Update header
+  const dst = info.isDST ? "SUM" : "WIN";
+  document.getElementById("info-base").textContent = `${selectedCity} (${dst})`;
+  document.getElementById("info-time").textContent = `${info.dateStr} ${info.timeStr}`;
+  const offStr = `UTC${info.offset>=0?"+":""}${info.offset}`;
+  document.getElementById("info-offset").textContent = offStr;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.fill();
+}
+
+// ============================================================
+// City buttons
+// ============================================================
+function renderCityButtons() {
+  const container = document.getElementById("city-buttons");
+  container.innerHTML = "";
+  Object.keys(CITIES).forEach(code => {
+    const btn = document.createElement("button");
+    btn.className = "city-btn" + (code === selectedCity ? " active" : "");
+    btn.textContent = code;
+    btn.onclick = () => { selectedCity = code; localStorage.setItem("mh_city", code); renderCityButtons(); draw(); };
+    container.appendChild(btn);
+  });
+}
+
+// ============================================================
+// Init
+// ============================================================
+renderCityButtons();
+draw();
+setInterval(draw, 1000);
+window.addEventListener("resize", draw);
+</script>
+</body>
+</html>
